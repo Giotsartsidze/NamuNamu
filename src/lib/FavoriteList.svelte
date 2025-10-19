@@ -4,12 +4,10 @@
 	import { onMount } from 'svelte';
 	import { fly } from 'svelte/transition';
 
-	// --- PROPS/CONTEXT: Function to trigger ICS download from parent ---
 	export let scheduleRecipeToCalendar: ((recipeTitle: string, dateStr: string, timeStr: string) => void) | undefined = undefined;
 
 	let expandedRecipeId: number | null = null;
 
-	// 💡 STATE: Tracks which recipe card has its scheduling form visible and holds the inputs
 	let schedulingStates: { [key: number]: { show: boolean, date: string, time: string } } = {};
 
 	onMount(() => {
@@ -24,7 +22,6 @@
 		});
 	});
 
-	// Initialize scheduling state for a recipe if it doesn't exist
 	function ensureSchedulingState(id: number) {
 		if (!schedulingStates[id]) {
 			const today = new Date().toISOString().substring(0, 10);
@@ -57,11 +54,9 @@
 		const match = recipe.content.match(/#+\s*Recipe Title:\s*(.*)/i);
 		const title = match ? match[1].trim() : recipe.title;
 
-		// If parent provides the function, use it
 		if (scheduleRecipeToCalendar) {
 			scheduleRecipeToCalendar(title, state.date, state.time);
 		} else {
-			// Fallback: create calendar file directly
 			const scheduleDateTime = new Date(`${state.date}T${state.time}:00`);
 			const future = new Date(scheduleDateTime.getTime() + 60 * 60 * 1000);
 			const formatTime = (date: Date) => date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
@@ -227,7 +222,7 @@ END:VCALENDAR`;
         background: rgba(255, 255, 255, 0.85);
         backdrop-filter: blur(30px);
         border-radius: 20px;
-        padding: 30px;
+        padding: 20px;
         box-shadow: 0 15px 40px rgba(88, 104, 121, 0.1);
         border: 1px solid rgba(255, 255, 255, 0.6);
         transition: all 0.3s ease;

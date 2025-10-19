@@ -2,10 +2,8 @@
 	import { fade } from 'svelte/transition';
 	import { onMount, afterUpdate } from 'svelte';
 
-	/** Prop: Function called when the user clicks "Start Cooking" or "Skip". */
 	export let onFinish: () => void;
 
-	/** NEW PROP: Function to tell the main app which mode to switch to. */
 	export let onModeChange: (mode: 'recipe' | 'planner' | 'health' | 'calorie' | null) => void;
 
 	const tutorialSteps = [
@@ -99,11 +97,9 @@
 				let leftPos: number;
 
 				if (selector.includes('.tabs') || selector.includes('.tab')) {
-					// Position BELOW and CENTERED for tabs
 					topPos = rect.bottom + 20;
 					leftPos = rect.left + (rect.width / 2) - (cardElement.offsetWidth / 2);
 				} else {
-					// Default positioning (right or left)
 					topPos = rect.top + (rect.height / 2) - (cardElement.offsetHeight / 2);
 					leftPos = rect.right + 20;
 
@@ -116,13 +112,11 @@
 					}
 				}
 
-				// Ensure vertical position is within screen bounds
 				if (topPos < 10) topPos = 10;
 				if (topPos + cardElement.offsetHeight > windowHeight - 10) {
 					topPos = windowHeight - cardElement.offsetHeight - 10;
 				}
 
-				// Ensure horizontal position is within screen bounds
 				if (leftPos < 10) leftPos = 10;
 				if (leftPos + cardElement.offsetWidth > windowWidth - 10) {
 					leftPos = windowWidth - cardElement.offsetWidth - 10;

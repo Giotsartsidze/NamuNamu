@@ -183,7 +183,6 @@
         color: #E8E8F0;
     }
 
-    /* Remove number input spinners for cleaner look */
     .number-input::-webkit-inner-spin-button,
     .number-input::-webkit-outer-spin-button {
         -webkit-appearance: none;

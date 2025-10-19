@@ -1,7 +1,6 @@
 import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
 
-// Initialize from localStorage or system preference
 const getInitialTheme = (): boolean => {
 	if (!browser) return false;
 
@@ -10,13 +9,11 @@ const getInitialTheme = (): boolean => {
 		return stored === 'true';
 	}
 
-	// Check system preference
 	return window.matchMedia('(prefers-color-scheme: dark)').matches;
 };
 
 export const darkMode = writable<boolean>(getInitialTheme());
 
-// Subscribe to changes and update localStorage
 if (browser) {
 	darkMode.subscribe(value => {
 		localStorage.setItem('darkMode', String(value));
@@ -27,7 +24,6 @@ if (browser) {
 		}
 	});
 
-	// Apply initial theme
 	if (getInitialTheme()) {
 		document.documentElement.classList.add('dark-mode');
 	}

@@ -11,8 +11,6 @@ const firebaseConfig = {
 	// You can include others like storageBucket and messagingSenderId if needed
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Initialize Firebase Authentication and export it
 export const auth: Auth = getAuth(app);

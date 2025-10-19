@@ -4,7 +4,6 @@
 	import { darkMode, toggleDarkMode } from '../stores/darkModeStore';
 	import FavoriteList from '$lib/FavoriteList.svelte';
 	import MarkdownRenderer from '$lib/MarkdownRenderer.svelte';
-	import RecipePlannerForm from '$lib/RecipePlannerForm.svelte';
 	import BiometricForm from '$lib/BiometricForm.svelte';
 	import GoalSettingForm from '$lib/GoalSettingForm.svelte';
 	import CookingMode from '$lib/CookingMode.svelte';
@@ -13,8 +12,13 @@
 	import type { User } from 'firebase/auth';
 	import { onMount } from 'svelte';
 	import TutorialOverlay from '$lib/TutorialOverlay.svelte';
+	import Toast from '$lib/Toast.svelte';
+	import { toast } from '../stores/toastStore';
+	import { fuse, type IngredientItem } from '../types/commonIngredients';
 
-	// --- Core State ---
+	let ingredientSuggestions: IngredientItem[] = [];
+
+
 	let ingredientInput: string = '';
 	let ingredients: string[] = [];
 	let dietaryRestrictions: string = '';
@@ -35,7 +39,6 @@
 		currentUser = value;
 	});
 
-	// --- Health/Biometric State ---
 	let gender: 'male' | 'female' | '' = '';
 	let age: number | string = '';
 	let weight: number | string = '';
@@ -45,26 +48,71 @@
 	let targetTimeframe: number | string = '';
 	let showGoalForm: boolean = false;
 	let isSubscribed: boolean = false;
+	let showSubscribeModal: boolean = false;
 
-	// --- Image Analysis State ---
 	let imageFile: File | null = null;
 	let imageBase64: string | null = null;
 	let imageMimeType: string | null = null;
 
-	// --- Scheduling State ---
 	let showCalendarForm: boolean = false;
 	let scheduleDate: string = new Date().toISOString().substring(0, 10);
 	let scheduleTime: string = '19:00';
 
 	const MIN_INGREDIENTS = 5;
 
-	// --- Content Stores ---
 	const tdeeContent: Writable<string> = writable('');
 	const planContent: Writable<string> = writable('');
 	const recipeContent: Writable<string> = writable('');
 	const goalPlanContent: Writable<string> = writable('');
 	const calorieContent: Writable<string> = writable('');
 
+	$: {
+		if (ingredientInput.trim().length > 0) {
+			const results = fuse.search(ingredientInput.trim());
+
+			ingredientSuggestions = results.map(result => result.item).slice(0, 8);
+
+		} else {
+			ingredientSuggestions = [];
+		}
+	}
+
+	function selectSuggestion(suggestion: IngredientItem) {
+		const trimmedInput = suggestion.name;
+		if (trimmedInput && !ingredients.includes(trimmedInput)) {
+			ingredients = [...ingredients, trimmedInput];
+			ingredientInput = '';
+			ingredientSuggestions = [];
+		}
+	}
+
+	function resetFormState() {
+		ingredientInput = '';
+		ingredients = [];
+		dietaryRestrictions = '';
+		medicalConditions = '';
+		errorMessage = null;
+		hasGenerated = false;
+
+		gender = '';
+		age = '';
+		weight = '';
+		height = '';
+		activityLevel = '';
+		targetWeight = '';
+		targetTimeframe = '';
+		showGoalForm = false;
+
+		imageFile = null;
+		imageBase64 = null;
+		imageMimeType = null;
+
+		tdeeContent.set('');
+		planContent.set('');
+		recipeContent.set('');
+		goalPlanContent.set('');
+		calorieContent.set('');
+	}
 	onMount(() => {
 		if (typeof window !== 'undefined' && !localStorage.getItem(TUTORIAL_KEY)) {
 			showTutorial = true;
@@ -81,6 +129,7 @@
 	function handleModeChange(mode: 'recipe' | 'planner' | 'health' | 'calorie' | null) {
 		if (mode) {
 			resetModes();
+			resetFormState();
 			currentMode = mode;
 		}
 	}
@@ -90,6 +139,7 @@
 	}
 
 	function resetModes() {
+		resetFormState();
 		isCookingMode = false;
 		showFavorites = false;
 	}
@@ -225,7 +275,7 @@
 		isSubscribed = true;
 		showGoalForm = false;
 
-		alert("Payment Successful! Generating your personalized plan now...");
+		toast.show('Payment Successful! Generating your personalized plan now...', 'success');
 
 		hasGenerated = true;
 		await generateFinalCaloriePlan();
@@ -373,7 +423,7 @@
 
 	function saveCurrentRecipe() {
 		addFavorite($recipeContent);
-		alert('Recipe saved to favorites!');
+		toast.show('Recipe saved to favorites!');
 	}
 
 	function saveCurrentPlan() {
@@ -382,7 +432,7 @@
 		const planContentToSave = `# ${planTitle}\n---\n${$planContent}\n`;
 
 		addFavorite(planContentToSave);
-		alert('Meal Plan saved to your favorites!');
+		toast.show('Meal Plan saved to your favorites!', 'success');
 	}
 
 	function printPlan() {
@@ -393,7 +443,7 @@
 		const scheduleDateTime = new Date(`${dateStr}T${timeStr}:00`);
 
 		if (scheduleDateTime <= new Date()) {
-			alert('Please select a date and time in the future.');
+			toast.show('Please select a date and time in the future.', 'warning');
 			return;
 		}
 
@@ -421,11 +471,12 @@ END:VCALENDAR`;
 		link.click();
 		document.body.removeChild(link);
 
-		alert(`Successfully scheduled "${recipeTitle}" for ${dateStr} at ${timeStr}!`);
+		toast.show(`Successfully scheduled "${recipeTitle}" for ${dateStr} at ${timeStr}!`, 'success');
 		showCalendarForm = false;
 	}
 </script>
 
+<Toast/>
 <div class="app-shell">
 	<div class="header">
 		<div class="welcome">
@@ -443,6 +494,11 @@ END:VCALENDAR`;
 					🌙
 				{/if}
 			</button>
+			{#if !isSubscribed}
+				<button on:click={() => showSubscribeModal = true} class="subscribe-btn" disabled={!currentUser}>
+					⭐ Subscribe
+				</button>
+			{/if}
 			<button on:click={logout} class="sign-out" disabled={!currentUser}>Sign Out</button>
 		</div>
 	</div>
@@ -522,16 +578,30 @@ END:VCALENDAR`;
 					{:else}
 						<div class="section-title">Your Ingredients</div>
 						<div class="input-group">
-							<div class="ingredients-container">
-								<input
-									type="text"
-									bind:value={ingredientInput}
-									on:keydown={handleKeyDown}
-									placeholder="Type ingredient and press Enter..."
-									disabled={isLoading}
-								/>
-								<button type="button" class="add-btn" on:click={addIngredient} disabled={isLoading}>+</button>
+							<div style="position: relative; z-index: 10;">
+								<div class="ingredients-container">
+									<input
+										type="text"
+										bind:value={ingredientInput}
+										on:keydown={handleKeyDown}
+										placeholder="Type ingredient and press Enter..."
+										disabled={isLoading}
+									/>
+									<button type="button" class="add-btn" on:click={addIngredient} disabled={isLoading}>+</button>
+								</div>
+
+								{#if ingredientSuggestions.length > 0 && ingredientInput.trim().length > 0}
+									<div class="suggestions-list">
+										{#each ingredientSuggestions as suggestion}
+											<div class="suggestion-item" on:click={() => selectSuggestion(suggestion)}>
+												<span class="suggestion-icon">{suggestion.icon}</span>
+												{suggestion.name}
+											</div>
+										{/each}
+									</div>
+								{/if}
 							</div>
+
 							<div class="ingredient-tags">
 								{#each ingredients as ingredient}
 									<div class="tag">
@@ -595,10 +665,19 @@ END:VCALENDAR`;
 								<button on:click={() => isCookingMode = true} class="action-btn cook-mode-btn">
 									🧑‍🍳 Start Cooking Mode
 								</button>
-								<button on:click={saveCurrentRecipe} class="action-btn save-btn">⭐ Save Recipe</button>
-								<button on:click={() => { showCalendarForm = !showCalendarForm; }} class="action-btn calendar-btn">
-									📅 Schedule Meal
+								<button
+										on:click={() => {
+										 if (isSubscribed) { showCalendarForm = !showCalendarForm; }
+										 else { showSubscribeModal = true; }
+										}}
+									class="action-btn calendar-btn"
+								>
+									 {isSubscribed ? '📅 Schedule Meal' : '🔒 Schedule Meal'}
 								</button>
+								<button on:click={saveCurrentRecipe} class="action-btn save-btn">⭐ Save Recipe</button>
+
+							</div>
+							<div class="recipe-actions">
 							</div>
 
 							{#if showCalendarForm}
@@ -608,10 +687,10 @@ END:VCALENDAR`;
 										<input type="date" bind:value={scheduleDate} min={new Date().toISOString().substring(0, 10)} />
 										<input type="time" bind:value={scheduleTime} />
 										<button on:click={() => {
-											const match = $recipeContent.match(/#+\s*Recipe Title:\s*(.*)/i);
-											const title = match ? match[1].trim() : 'AI Generated Recipe';
-											addToCalendar(title, scheduleDate, scheduleTime);
-										}} class="schedule-submit">
+            const match = $recipeContent.match(/#+\s*Recipe Title:\s*(.*)/i);
+            const title = match ? match[1].trim() : 'AI Generated Recipe';
+            addToCalendar(title, scheduleDate, scheduleTime);
+           }} class="schedule-submit">
 											Add to Calendar
 										</button>
 									</div>
@@ -624,7 +703,13 @@ END:VCALENDAR`;
 					{:else if currentMode === 'planner' && $planContent}
 						<div class="recipe-actions">
 							<button on:click={saveCurrentPlan} class="action-btn save-btn">⭐ Save Plan</button>
-							<button on:click={printPlan} class="action-btn">⬇️ Download PDF</button>
+							<button on:click={printPlan} class="action-btn" disabled={!isSubscribed}>
+								{#if isSubscribed}
+									⬇️ Download PDF
+								{:else}
+									🔒 Unlock PDF (Subscribe)
+								{/if}
+							</button>
 						</div>
 						<MarkdownRenderer markdownContent={$planContent} />
 
@@ -688,6 +773,35 @@ END:VCALENDAR`;
 	</div>
 {/if}
 
+
+{#if showSubscribeModal}
+	<div class="modal-overlay" on:click={() => showSubscribeModal = false}>
+		<div class="modal-content" on:click|stopPropagation>
+			<button class="modal-close" on:click={() => showSubscribeModal = false}>&times;</button>
+			<h2 class="modal-title">Unlock Premium Features ✨</h2>
+			<p class="modal-subtitle">
+				Subscribe now to get unlimited access to:
+			</p>
+			<ul class="premium-features">
+				<li>⬇️ Download Meal Plans as PDF</li>
+				<li>📅 Schedule Meals to your Calendar</li>
+				<li>🎯 Personalized Calorie & Goal Planning</li>
+			</ul>
+			<div class="price-card">
+				<p class="price-tag">Just $4.99 / Month</p>
+			</div>
+			<button on:click={() => {
+        isSubscribed = true;
+        showSubscribeModal = false;
+        toast.show('Subscription Activated! You are now a Premium Member.', 'success');
+      }} class="generate-btn subscribe-submit-btn">
+				Activate Premium
+			</button>
+			<p class="cancel-text">Cancel anytime. 7-day free trial available.</p>
+		</div>
+	</div>
+{/if}
+
 <style>
     * {
         margin: 0;
@@ -695,18 +809,21 @@ END:VCALENDAR`;
         box-sizing: border-box;
     }
 
+
+
     :global(body) {
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         background: linear-gradient(135deg, #c6dddb 0%, #92a4ac 40%, #f9fbfd 100%);
         min-height: 100vh;
         padding: 20px;
+        margin: 0;
         position: relative;
         overflow-x: hidden;
         transition: background 0.3s ease, color 0.3s ease;
     }
 
     :global(body.dark-mode) {
-        background: linear-gradient(135deg, #2D2D35 0%, #3D3D48 50%, #4A4A55 100%);
+        background: linear-gradient(135deg, #3a5452 0%, #6b90a1 40%, #364859 100%);
     }
 
     :global(body::before) {
@@ -725,7 +842,7 @@ END:VCALENDAR`;
 
     :global(body.dark-mode::before) {
         background-image:
-                radial-gradient(circle at 20% 30%, rgba(90, 90, 105, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 20% 30%, rgba(90, 90, 109, 0.1) 0%, transparent 50%),
                 radial-gradient(circle at 80% 70%, rgba(70, 70, 85, 0.08) 0%, transparent 50%);
     }
 
@@ -787,7 +904,7 @@ END:VCALENDAR`;
     }
 
     :global(.dark-mode) .welcome {
-        color: #151558;
+        color: #D4D4E0;
     }
 
     .sign-out {
@@ -811,7 +928,7 @@ END:VCALENDAR`;
 
     :global(.dark-mode) .sign-out {
         background: rgba(255, 255, 255, 0.18);
-        color: #151558;
+        color: #D4D4E0;
         border-color: rgba(255, 255, 255, 0.15);
     }
 
@@ -841,7 +958,7 @@ END:VCALENDAR`;
     }
 
     :global(.dark-mode) .hero h1 {
-        color: #151558;
+        color: #D4D4E0;
     }
 
     .hero p {
@@ -852,7 +969,7 @@ END:VCALENDAR`;
     }
 
     :global(.dark-mode) .hero p {
-        color: #151558;
+        color: #9898A8;
     }
 
     .action-buttons {
@@ -958,7 +1075,7 @@ END:VCALENDAR`;
     :global(.dark-mode) .tab {
         background: rgba(255, 255, 255, 0.05);
         border-color: rgba(255, 255, 255, 0.1);
-        color: #151558;
+        color: #D4D4E0;
     }
 
     :global(.dark-mode) .tab.active {
@@ -1304,8 +1421,8 @@ END:VCALENDAR`;
         font-weight: 500;
     }
 
-    .action-btn:hover {
-        background: rgba(249, 251, 253, 0.8);
+    .action-btn:hover:not(:disabled) { /* MODIFIED: prevent hover on disabled */
+        /*background: rgba(249, 251, 253, 0.8);*/
         transform: translateY(-2px);
     }
 
@@ -1315,9 +1432,27 @@ END:VCALENDAR`;
         color: #D4D4E0;
     }
 
-    :global(.dark-mode) .action-btn:hover {
+    :global(.dark-mode) .action-btn:hover:not(:disabled) { /* MODIFIED: prevent hover on disabled */
         background: rgba(255, 255, 255, 0.12);
     }
+
+    /* New styles for disabled/locked action button */
+    .action-btn:disabled {
+        opacity: 0.8;
+        cursor: not-allowed;
+        background: #f1f1f1; /* Light gray */
+        color: #7a8996;
+        border-color: rgba(146, 164, 172, 0.2);
+        box-shadow: none;
+        transform: none;
+    }
+
+    :global(.dark-mode) .action-btn:disabled {
+        background: rgba(255, 255, 255, 0.05);
+        color: #9898A8;
+        border-color: rgba(255, 255, 255, 0.1);
+    }
+    /* End New styles */
 
     .save-btn {
         background: linear-gradient(135deg, #f1c40f 0%, #f39c12 100%);
@@ -1616,5 +1751,220 @@ END:VCALENDAR`;
         .schedule-submit {
             width: 100%;
         }
+    }
+    /* ... existing styles ... */
+
+    .suggestions-list {
+        position: absolute;
+        top: 100%; /* Position right below the input container */
+        left: 0;
+        right: 0;
+        background: #ffffff;
+        border: 1px solid rgba(146, 164, 172, 0.3);
+        border-radius: 10px;
+        box-shadow: 0 4px 15px rgba(88, 104, 121, 0.1);
+        margin-top: 8px; /* Small gap between input and list */
+        max-height: 250px;
+        overflow-y: auto;
+        z-index: 100; /* Ensure it floats above other card content */
+    }
+
+    :global(.dark-mode) .suggestions-list {
+        background: #364859;
+        border-color: rgba(255, 255, 255, 0.15);
+    }
+
+    .suggestion-item {
+        padding: 12px 22px;
+        cursor: pointer;
+        font-size: 14px;
+        color: #586879;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        border-bottom: 1px solid rgba(146, 164, 172, 0.1);
+        transition: background 0.2s ease;
+    }
+
+    .suggestion-item:last-child {
+        border-bottom: none;
+    }
+
+    .suggestion-item:hover {
+        background: #f0f4f7;
+    }
+
+    :global(.dark-mode) .suggestion-item {
+        color: #E8E8F0;
+        border-color: rgba(255, 255, 255, 0.05);
+    }
+
+    :global(.dark-mode) .suggestion-item:hover {
+        background: rgba(255, 255, 255, 0.1);
+    }
+
+    .suggestion-icon {
+        font-size: 18px;
+        line-height: 1; /* Keep icon vertically aligned */
+    }
+
+    .subscribe-btn {
+        background: linear-gradient(135deg, #f1c40f 0%, #f39c12 100%);
+        color: #2c3e50;
+        border: none;
+        padding: 8px 20px;
+        border-radius: 25px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px rgba(241, 196, 15, 0.3);
+        letter-spacing: 0.5px;
+    }
+
+    .subscribe-btn:hover:not(:disabled) {
+        background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+        transform: translateY(-1px);
+        box-shadow: 0 6px 20px rgba(241, 196, 15, 0.4);
+    }
+
+    .subscribe-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+
+    /* Modal Styles */
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.6);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+        backdrop-filter: blur(5px);
+    }
+
+    .modal-content {
+        background: #ffffff;
+        border-radius: 20px;
+        padding: 40px;
+        width: 100%;
+        max-width: 500px;
+        position: relative;
+        text-align: center;
+        box-shadow: 0 10px 50px rgba(0, 0, 0, 0.2);
+        animation: fadeIn 0.3s ease-out;
+    }
+
+    :global(.dark-mode) .modal-content {
+        background: #364859;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .modal-close {
+        position: absolute;
+        top: 15px;
+        right: 15px;
+        background: none;
+        border: none;
+        font-size: 24px;
+        cursor: pointer;
+        color: #92a4ac;
+    }
+
+    .modal-title {
+        color: #586879;
+        font-size: 28px;
+        font-weight: 700;
+        margin-bottom: 10px;
+    }
+
+    :global(.dark-mode) .modal-title {
+        color: #D4D4E0;
+    }
+
+    .modal-subtitle {
+        color: #7a8996;
+        font-size: 15px;
+        margin-bottom: 25px;
+    }
+
+    :global(.dark-mode) .modal-subtitle {
+        color: #9898A8;
+    }
+
+    .premium-features {
+        list-style: none;
+        text-align: left;
+        padding: 0;
+        margin: 0 0 30px;
+        color: #586879;
+        font-size: 15px;
+        line-height: 2.2;
+    }
+
+    :global(.dark-mode) .premium-features {
+        color: #B8B8C5;
+    }
+
+    .premium-features li {
+        background: rgba(198, 221, 219, 0.1);
+        padding: 8px 15px;
+        border-radius: 8px;
+        margin-bottom: 8px;
+        font-weight: 500;
+    }
+
+    :global(.dark-mode) .premium-features li {
+        background: rgba(255, 255, 255, 0.05);
+    }
+
+    .price-card {
+        background: #92a4ac;
+        color: white;
+        padding: 15px;
+        border-radius: 12px;
+        margin-bottom: 25px;
+        box-shadow: 0 4px 15px rgba(146, 164, 172, 0.4);
+    }
+
+    :global(.dark-mode) .price-card {
+        background: #5A5A6D;
+    }
+
+    .price-tag {
+        font-size: 20px;
+        font-weight: 700;
+    }
+
+    .subscribe-submit-btn {
+        background: linear-gradient(135deg, #4CAF50 0%, #388E3C 100%);
+        box-shadow: 0 6px 25px rgba(76, 175, 80, 0.4);
+        letter-spacing: 2px;
+        padding: 16px;
+    }
+
+    .subscribe-submit-btn:hover {
+        background: linear-gradient(135deg, #388E3C 0%, #2E7D32 100%);
+    }
+
+    .cancel-text {
+        font-size: 11px;
+        color: #a5b5be;
+        margin-top: 15px;
+    }
+
+    :global(.dark-mode) .cancel-text {
+        color: #787888;
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; transform: scale(0.95); }
+        to { opacity: 1; transform: scale(1); }
     }
 </style>

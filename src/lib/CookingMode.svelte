@@ -111,7 +111,6 @@
 
 	<div class="controls">
 		<button on:click={prevStep} disabled={currentStepIndex === 0} class="nav-btn prev-btn">
-			<span class="icon">⬅️</span>
 			Previous Step
 		</button>
 
@@ -124,15 +123,13 @@
 
 		<button on:click={nextStep} disabled={currentStepIndex === steps.length - 1} class="nav-btn next-btn">
 			Next Step
-			<span class="icon">➡️</span>
 		</button>
 	</div>
 </div>
 
 <style>
     .cooking-mode-container {
-        background-color: var(--primary-deep-blue);
-        color: white;
+        /*color: white;*/
         min-height: 500px;
         padding: 30px;
         border-radius: 12px;
@@ -141,6 +138,7 @@
         flex-direction: column;
         justify-content: space-between;
         text-align: center;
+				background: linear-gradient(135deg, #c6dddb 0%, #92a4ac 40%, #f9fbfd 100%);
     }
     .header {
         margin-bottom: 20px;
@@ -154,7 +152,7 @@
     .recipe-name {
         font-size: 1.2em;
         margin-top: 5px;
-        color: rgba(255, 255, 255, 0.8);
+        /*color: rgba(255, 255, 255, 0.8);*/
     }
     .step-counter {
         margin-top: 15px;
@@ -199,20 +197,20 @@
         gap: 10px;
     }
     .nav-btn.prev-btn {
-        background-color: var(--primary-gold);
-        color: var(--primary-deep-blue);
+        background: linear-gradient(135deg, #586879 0%, #485566 100%);
+        color: #bdc3c7;
     }
     .nav-btn.next-btn {
-        background-color: var(--primary-gold);
-        color: var(--primary-deep-blue);
+        background: linear-gradient(135deg, #586879 0%, #485566 100%);
+        color: #bdc3c7;
     }
     .nav-btn:disabled {
-        background-color: #576574;
+        background-color: #242e36;
         color: #bdc3c7;
         cursor: not-allowed;
     }
     .tts-btn {
-        background-color: #2ecc71;
+       	background:  linear-gradient(135deg, #2179d9 0%, #1d293b 100%);
         color: white;
     }
     .tts-btn.reading {

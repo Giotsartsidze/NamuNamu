@@ -7,7 +7,6 @@ const ai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
 const model = "gemini-2.5-flash"; // Supports multimodal inputs
 
 /**
- * Converts a base64 string to a GoogleGenAI Part object.
  * @param {string} mimeType - The MIME type of the image.
  * @param {string} base64Data - The base64 encoded image data.
  */
@@ -20,10 +19,6 @@ function fileToGenerativePart(mimeType, base64Data) {
 	};
 }
 
-/**
- * Handles POST requests for image analysis.
- * Expects { imageBase64: string, imageMimeType: string }
- */
 export async function POST({ request }) {
 	try {
 		const { imageBase64, imageMimeType } = await request.json();
