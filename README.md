@@ -130,7 +130,3 @@ The application will be running locally at `http://localhost:5173`.
 Contributions are welcome\! If you find a bug or have an idea for an improvement (like expanding the `commonIngredients` list with more items or icons), please **open an issue or submit a pull request**.
 
 -----
-
-## 📝 License
-
-This project is licensed under the **MIT License** - see the `LICENSE` file for details.
