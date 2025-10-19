@@ -29,6 +29,11 @@
 	let currentMode: 'recipe' | 'planner' | 'health' | 'calorie' = 'recipe';
 	let hasGenerated: boolean = false;
 	let isCookingMode: boolean = false;
+	let shoppingListContent: string = '';
+	let showShoppingListModal: boolean = false;
+	let emailRecipient: string = '';
+	let isGeneratingList: boolean = false;
+	let isSendingEmail: boolean = false;
 
 	let currentUser: User | null | undefined;
 
@@ -37,6 +42,9 @@
 
 	user.subscribe(value => {
 		currentUser = value;
+		if (currentUser) {
+			emailRecipient = currentUser.email || '';
+		}
 	});
 
 	let gender: 'male' | 'female' | '' = '';
@@ -74,6 +82,112 @@
 
 		} else {
 			ingredientSuggestions = [];
+		}
+	}
+
+		function resetShoppingListState() {
+			shoppingListContent = '';
+			showShoppingListModal = false;
+			isGeneratingList = false;
+			isSendingEmail = false;
+			errorMessage = null;
+		}
+
+	// Extend resetModes to include the new state
+	function resetModes() {
+		resetFormState();
+		resetShoppingListState(); // NEW
+		isCookingMode = false;
+		showFavorites = false;
+	}
+
+	async function generateShoppingList(planContent: string) {
+		if (planContent.length < 50) {
+			toast.show('Please generate a meal plan first!', 'warning');
+			return;
+		}
+
+		shoppingListContent = '';
+		isGeneratingList = true;
+		errorMessage = null;
+		showShoppingListModal = true;
+
+		try {
+			const response = await fetch('/api/generate-shopping-list', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ mealPlanMarkdown: planContent }),
+			});
+
+			if (!response.ok || !response.body) {
+				const errorText = await response.text();
+				throw new Error(`Shopping List API call failed: ${response.status} - ${errorText}`);
+			}
+
+			const reader = response.body.getReader();
+			const decoder = new TextDecoder();
+			while (true) {
+				const { done, value } = await reader.read();
+				if (done) break;
+				shoppingListContent += decoder.decode(value, { stream: true });
+			}
+
+		} catch (error) {
+			console.error(error);
+			errorMessage = 'Failed to generate the shopping list.';
+			shoppingListContent = 'Oops! Could not generate the shopping list.';
+		} finally {
+			isGeneratingList = false;
+		}
+	}
+
+	function handleShoppingListClick() {
+		let content = '';
+		if (currentMode === 'planner') {
+			content = $planContent;
+		} else if (currentMode === 'health' && isSubscribed) {
+			content = $goalPlanContent;
+		}
+
+		if (content) {
+			generateShoppingList(content);
+		} else {
+			toast.show('No plan content available to generate a list.', 'warning');
+		}
+	}
+
+	async function sendShoppingListEmail() {
+		isSendingEmail = true;
+		errorMessage = null;
+
+		if (!emailRecipient || !shoppingListContent) {
+			errorMessage = 'Please enter a valid email and ensure the list is generated.';
+			isSendingEmail = false;
+			return;
+		}
+
+		try {
+			const response = await fetch('/api/send-email', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					recipient: emailRecipient,
+					subject: 'Your AI Namu Namu Shopping List',
+					body: shoppingListContent,
+				}),
+			});
+
+			if (!response.ok) {
+				throw new Error('Email sending failed.');
+			}
+
+			toast.show(`Shopping list sent to ${emailRecipient}!`, 'success');
+			showShoppingListModal = false;
+		} catch (error) {
+			console.error(error);
+			errorMessage = 'Failed to send the email. You may need to refresh your session.';
+		} finally {
+			isSendingEmail = false;
 		}
 	}
 
@@ -136,12 +250,6 @@
 
 	function startTutorialAgain() {
 		showTutorial = true;
-	}
-
-	function resetModes() {
-		resetFormState();
-		isCookingMode = false;
-		showFavorites = false;
 	}
 
 	async function generateContent() {
@@ -709,6 +817,15 @@ END:VCALENDAR`;
 								{:else}
 									🔒 Unlock PDF (Subscribe)
 								{/if}
+
+							</button>
+							<button on:click={ handleShoppingListClick} class="action-btn cook-mode-btn" disabled={!isSubscribed}>
+								{#if isSubscribed}
+									🛒 Add Shopping List
+								{:else}
+									🔒 Add Shopping List (Subscribe)
+								{/if}
+
 							</button>
 						</div>
 						<MarkdownRenderer markdownContent={$planContent} />
@@ -767,12 +884,66 @@ END:VCALENDAR`;
 			<div class="recipe-actions">
 				<button on:click={saveCurrentPlan} class="action-btn save-btn">⭐ Save Plan</button>
 				<button on:click={printPlan} class="action-btn">⬇️ Download PDF</button>
+				<button on:click={handleShoppingListClick} class="action-btn cook-mode-btn" disabled={!isSubscribed}>
+					{#if isSubscribed}
+						🛒 Add Shopping List
+					{:else}
+						🔒 Add Shopping List (Subscribe)
+					{/if}
+				</button>
 			</div>
 			<MarkdownRenderer markdownContent={$goalPlanContent} />
 		{/if}
 	</div>
 {/if}
 
+
+{#if showShoppingListModal}
+	<div class="modal-overlay" on:click={() => showShoppingListModal = false}>
+		<div class="modal-content" on:click|stopPropagation style="max-width: 650px;">
+			<button class="modal-close" on:click={() => showShoppingListModal = false}>&times;</button>
+			<h2 class="modal-title" style="margin-bottom: 20px;">🛒 Your Consolidated Shopping List</h2>
+
+			{#if isGeneratingList}
+				<div class="loading-message">
+					<div class="spinner"></div>
+					Parsing plan and compiling list...
+				</div>
+			{:else if shoppingListContent && shoppingListContent.length > 0 && !errorMessage}
+				<div class="list-display" style="max-height: 40vh; overflow-y: auto; text-align: left; margin-bottom: 25px; padding: 20px; border: 1px solid rgba(146, 164, 172, 0.3); border-radius: 10px; background: #f9fbfd;">
+					<MarkdownRenderer markdownContent={shoppingListContent} />
+				</div>
+
+				<form on:submit|preventDefault={sendShoppingListEmail}>
+					<div class="section-title" style="text-align: left; margin-bottom: 15px;">Share via Email</div>
+					<div class="input-group" style="display: flex; gap: 10px; margin-bottom: 0;">
+						<input
+							type="email"
+							bind:value={emailRecipient}
+							placeholder="Recipient Email"
+							required
+							disabled={isSendingEmail}
+							style="flex: 1;"
+						/>
+						<button type="submit" class="generate-btn" style="width: auto; margin: 0; padding: 16px 24px; background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);" disabled={isSendingEmail}>
+							{#if isSendingEmail}
+								<span class="spinner-inline"></span> Sending...
+							{:else}
+								📧 Send List
+							{/if}
+						</button>
+					</div>
+					{#if errorMessage}
+						<p class="error">{errorMessage}</p>
+					{/if}
+				</form>
+
+			{:else}
+				<p class="error" style="margin-top: 0;">{errorMessage || 'Failed to generate a shopping list. Please try generating the meal plan again.'}</p>
+			{/if}
+		</div>
+	</div>
+{/if}
 
 {#if showSubscribeModal}
 	<div class="modal-overlay" on:click={() => showSubscribeModal = false}>
